@@ -17,7 +17,7 @@ copulaboost <- function(y, x, cov_types, n_models = 2, n_covs=5,
 
   model[[1]][[1]] <- intercept
   model[[1]][[2]] <- NULL
-  
+
   current_prediction <- rep(intercept, length(y))
 
   # This piece of code compiles the p-values of the regression coefficients
@@ -25,21 +25,24 @@ copulaboost <- function(y, x, cov_types, n_models = 2, n_covs=5,
   # and the minimum p-value of the regression coefficients of categorical
   # variables.
   compute_p_value_weights <- function(y, x, x_type){
+    x <- as.data.frame(x)
     vals <- rep(1, ncol(x))
     vals[x_type == "d"] <- apply(x[, x_type=="d"], 2,
                                  function(x) length(unique(x)) - 1)
     colind <- cumsum(vals)
     x[, which(x_type=="d")] <- apply(x[, which(x_type == "d")], 2, as.factor)
-    x_ <- (model.matrix(~., data=x))
+    x[, which(x_type=="c")] <- apply(x[, which(x_type == "c")], 2, as.numeric)
+
+    x_ <- model.matrix(~., data=as.data.frame(x))
     lmod <- lm(y~x_-1)
     t_vals <- summary(lmod)$coef[-1, 4]
-    c(min(t_vals[1:colind[1]]), 
+    c(min(t_vals[1:colind[1]]),
       sapply(2:length(colind),
              function(j) min(t_vals[(colind[j-1] + 1):(colind[j])])))
   }
 
   # Compute the weights, and draw the covariates to include.
-  p_val <- compute_p_value_weights(y - plogis(current_prediction), x, x_type)
+  p_val <- compute_p_value_weights(y - plogis(current_prediction), x, cov_types)
   model[[2]][[2]] <- sample(dim(x)[2], n_covs, prob = 1 - p_val)
 
   # Fit first non-constant model
@@ -67,7 +70,7 @@ copulaboost <- function(y, x, cov_types, n_models = 2, n_covs=5,
       # random sampling as a placeholder for now
       #model[[m]][[2]] <- sample(dim(x)[2], n_covs)
       p_val <- compute_p_value_weights(y-plogis(current_prediction),
-                                       x, x_type)
+                                       x, cov_types)
       model[[m]][[2]] <- sample(dim(x)[2], n_covs, prob = 1 - p_val)
 
       # Fit model

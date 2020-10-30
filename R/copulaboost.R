@@ -124,17 +124,20 @@ copulaboost <- function(y, x, cov_types, n_models = 2, n_covs=5,
 }
 
 
-predict.copulaboost <- function(model, new_x=NULL) {
+predict.copulaboost <- function(model, new_x=NULL, eps=NULL) {
 
+  if (is.null(eps)){
+    eps <- model$eps
+  }
   if (!is.null(new_x)){
     prediction <- matrix(0, nrow=nrow(new_x), ncol=length(model$model))
     prediction[, 1] <- model$model[[1]][[1]]
     prediction[, 2:length(model$model)] <- vapply(
       2:length(model$model),
-      function(m) copulareg::predict.copulareg(
+      function(m) model$learning_rate*copulareg::predict.copulareg(
         model$model[[m]][[1]],
         newdata = new_x[, model$model[[m]][[2]]],
-        eps=model$eps
+        eps=eps
       ),
       FUN.VALUE = prediction[, 1]
     )
@@ -144,12 +147,16 @@ predict.copulaboost <- function(model, new_x=NULL) {
     prediction[, 1] <- model$model[[1]][[1]]
     prediction[, 2:length(model$model)] <- vapply(
       2:length(model$model),
-      function(m) copulareg::predict.copulareg(
+      function(m) model$learning_rate*copulareg::predict.copulareg(
         model$model[[m]][[1]],
-        eps=model$eps
+        eps=eps
       ),
       FUN.VALUE = prediction[, 1]
     )
+  }
+
+  for (i in seq(nrow(prediction))){
+    prediction[i, is.na(prediction[i, ])] <- 0
   }
 
   list(individual=prediction, total = t(apply(prediction, 1, cumsum)))

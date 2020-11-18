@@ -3,7 +3,7 @@
 copulaboost <- function(y, x, cov_types, n_models = 2, n_covs=5,
                         learning_rate = .1, eps=5e-2, extra_x=NULL,
                         verbose=F, cont_method="Ingrid_mod", subsample_rows = F,
-                        prop_sample=.1, n_sample = NULL) {
+                        prop_sample=.1, n_sample = NULL, ml_update=F) {
 
 
   # Make an empty version of the object that will be returned
@@ -19,6 +19,7 @@ copulaboost <- function(y, x, cov_types, n_models = 2, n_covs=5,
   model[[1]][[2]] <- NULL
 
   current_prediction <- rep(intercept, length(y))
+  scaling <- rep(1, n_models)
 
   # This piece of code compiles the p-values of the regression coefficients
   # of a univariate linear fit, for each continuous and binary variable,
@@ -41,6 +42,10 @@ copulaboost <- function(y, x, cov_types, n_models = 2, n_covs=5,
              function(j) min(t_vals[(colind[j-1] + 1):(colind[j])])))
   }
 
+  ll <- function(eta, y){
+    mean(y*eta - log(1 + exp(eta)))
+  }
+
   # Compute the weights, and draw the covariates to include.
   p_val <- compute_p_value_weights(y - plogis(current_prediction), x, cov_types)
   model[[2]][[2]] <- sample(dim(x)[2], n_covs, prob = 1 - p_val)
@@ -55,12 +60,22 @@ copulaboost <- function(y, x, cov_types, n_models = 2, n_covs=5,
     )
 
   time <- proc.time()
-  current_prediction <- (current_prediction +
-                           copulareg::predict.copulareg(model[[2]][[1]]))
+  curr_incr <- copulareg::predict.copulareg(model[[2]][[1]])
+  if (ml_update){
+    scaling[1] <- optim(par=1,
+                        fn=function(theta) -ll(current_prediction +
+                                                 theta*curr_incr, y=y),
+                        method = "L-BFGS-B", lower = 0, upper = 100
+                        )$par
+  }
+
+  current_prediction <- current_prediction + learning_rate*scaling[1]*curr_incr
+
   if (verbose){
     cat(paste0("First integration took ", round(proc.time()[3] - time[3], 4),
                " seconds.\n"))
   }
+
   # Fit the rest of the models
   if (n_models >= 2){
 
@@ -90,68 +105,98 @@ copulaboost <- function(y, x, cov_types, n_models = 2, n_covs=5,
                                                 extra_y = (y - plogis(current_prediction))[-sample_rows])
 
       } else {
-        model[[m]][[1]] <- copulareg::copulareg(y - plogis(current_prediction),
-                                                x=x[, model[[m]][[2]]], var_type_y = "c",
-                                                var_type_x = cov_types[model[[m]][[2]]],
-                                                extra_x = extra_x[, model[[m]][[2]]])
+        model[[m]][[1]] <- copulareg::copulareg(
+          y - plogis(current_prediction), x=x[, model[[m]][[2]]],
+          var_type_y = "c", var_type_x = cov_types[model[[m]][[2]]],
+          extra_x = extra_x[, model[[m]][[2]]]
+          )
       }
 
       time <- proc.time()
       if (subsample_rows){
-        current_prediction <- (
-          current_prediction +
-            copulareg::predict.copulareg(model[[m]][[1]],
-                                         newdata = x[, model[[m]][[2]]],
-                                         eps=eps,
-                                         cont_method=cont_method)
+        curr_incr <- copulareg::predict.copulareg(
+          model[[m]][[1]],
+          newdata = x[, model[[m]][[2]]],
+          eps=eps,
+          cont_method=cont_method
         )
       } else{
-        current_prediction <- (
-          current_prediction +
-            copulareg::predict.copulareg(model[[m]][[1]], eps=eps,
-                                         cont_method=cont_method)
-        )
+        curr_incr <- copulareg::predict.copulareg(
+          model[[m]][[1]], eps=eps, cont_method=cont_method
+          )
       }
+      if (ml_update) {
+        scaling[m-1] <- optim(par=1,
+                              fn=function(theta) -ll(current_prediction +
+                                                       theta*curr_incr, y=y),
+                              method = "L-BFGS-B", lower = 0, upper = 100
+                              )$par
+
+      }
+      current_prediction <- (current_prediction +
+                               learning_rate*scaling[m-1]*curr_incr)
       if (verbose){
-        cat(paste0("Integration no. ", m-1, " took ", round(proc.time()[3] - time[3], 4), " seconds.\n"))
+        cat(paste0("Integration no. ", m-1, " took ",
+                   round(proc.time()[3] - time[3], 4), " seconds.\n"))
       }
     }
   }
 
-  res <- list(model=model, learning_rate=learning_rate, cov_types=cov_types, eps=eps)
+  res <- list(model=model, learning_rate=learning_rate, cov_types=cov_types,
+              eps=eps, scaling=scaling)
   class(res) <- "copulaboost"
   res
 }
 
 
-predict.copulaboost <- function(model, new_x=NULL, eps=NULL) {
+predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
+                                cont_method="Ingrid_mod", verbose = F) {
 
   if (is.null(eps)){
     eps <- model$eps
   }
+
+  if (verbose){
+    pb <- txtProgressBar(min=0, max = length(model$model), style = 3)
+  } else{
+    pb <- NULL
+  }
+
+  pred_m <- function(m, learning_rate, pb = NULL, model, new_x=NULL, eps){
+    # Function that implements the code that is looped
+    # using vapply
+    if (!is.null(pb)){
+      setTxtProgressBar(pb, value=m)
+    }
+    if (!is.null(new_x)){
+      learning_rate[m]*copulareg::predict.copulareg(
+        model[[m]][[1]], newdata = new_x[, model[[m]][[2]]], eps=eps,
+        cont_method=cont_method
+      )
+    } else {
+      learning_rate[m]*copulareg::predict.copulareg(model[[m]][[1]], eps=eps,
+                                                 cont_method=cont_method)
+    }
+  }
+
+  nrowoutput <- switch(1*(!is.null(new_x)) + 1,
+                       model$model[[2]][[1]]$model$nobs,
+                       nrow(new_x))
+
+  prediction <- matrix(0, nrow=nrowoutput, ncol=length(model$model))
+  prediction[, 1] <- model$model[[1]][[1]]
+
   if (!is.null(new_x)){
-    prediction <- matrix(0, nrow=nrow(new_x), ncol=length(model$model))
-    prediction[, 1] <- model$model[[1]][[1]]
     prediction[, 2:length(model$model)] <- vapply(
-      2:length(model$model),
-      function(m) model$learning_rate*copulareg::predict.copulareg(
-        model$model[[m]][[1]],
-        newdata = new_x[, model$model[[m]][[2]]],
-        eps=eps
-      ),
-      FUN.VALUE = prediction[, 1]
+      2:length(model$model), pred_m,
+      learning_rate=model$learning_rate*model$scaling, pb=pb,
+      model=model$model, new_x=new_x, eps=eps, FUN.VALUE = prediction[, 1]
     )
   } else {
-    prediction <- matrix(0, nrow=model$model[[2]][[1]]$model$nobs,
-                         ncol=length(model$model))
-    prediction[, 1] <- model$model[[1]][[1]]
     prediction[, 2:length(model$model)] <- vapply(
-      2:length(model$model),
-      function(m) model$learning_rate*copulareg::predict.copulareg(
-        model$model[[m]][[1]],
-        eps=eps
-      ),
-      FUN.VALUE = prediction[, 1]
+      2:length(model$model), pred_m,
+      learning_rate=model$learning_rate*model$scaling, pb=pb,
+      model=model$model, eps=eps, FUN.VALUE = prediction[, 1]
     )
   }
 

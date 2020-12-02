@@ -1,13 +1,13 @@
 
 
-copulaboost <- function(y, x, cov_types, n_models = 2, n_covs=5,
-                        learning_rate = .1, eps=5e-2, extra_x=NULL,
-                        verbose=F, cont_method="Ingrid_mod", subsample_rows = F,
-                        prop_sample=.1, n_sample = NULL, ml_update=F,
-                        sel_method="p-value") {
+copulaboost <- function(y, x, cov_types, n_models = 100, n_covs=5,
+                        learning_rate = 0.33, eps=5e-2, extra_x=NULL,
+                        verbose=F, cont_method="Ingrid", subsample_rows = F,
+                        prop_sample=.1, n_sample = NULL, ml_update=T,
+                        sel_method="p-value", lambda_ridgesel = 1) {
 
   if (sel_method == "p-value-ridge"){
-    invmat <- .comp_invmat_ridge(x, cov_types)
+    invmat <- .comp_invmat_ridge(x, cov_types, lambda = lambda_ridgesel)
   } else {
     invmat <- NULL
   }
@@ -36,7 +36,8 @@ copulaboost <- function(y, x, cov_types, n_models = 2, n_covs=5,
 
   # Compute the weights, and draw the covariates to include.
   model[[2]][[2]] <- .sel_covs(y - plogis(current_prediction), x, cov_types,
-                               n_covs, method=sel_method, invmat=invmat)
+                               n_covs, method=sel_method, invmat=invmat,
+                               lambda=lambda_ridgesel)
 
   # Fit first non-constant model
   model[[2]][[1]] <- copulareg::copulareg(
@@ -69,7 +70,8 @@ copulaboost <- function(y, x, cov_types, n_models = 2, n_covs=5,
     for (m in 3:(n_models + 1)){
 
       model[[m]][[2]] <- .sel_covs(y - plogis(current_prediction), x, cov_types,
-                                   n_covs, method=sel_method, invmat=invmat)
+                                   n_covs, method=sel_method, invmat=invmat,
+                                   lambda=lambda_ridgesel)
       # Fit model
       if(subsample_rows){
 
@@ -189,12 +191,13 @@ predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
 }
 
 # Covariate selection methods
-.sel_covs <- function(y, x, x_type, n_covs, method="p-value", invmat=NULL){
+.sel_covs <- function(y, x, x_type, n_covs, method="p-value", invmat=NULL,
+                      lambda = 1){
 
   if (method == "p-value"){
     .p_val_sel(y, x, x_type, n_covs)
   } else if (method == "p-value-ridge") {
-    .ridge_p_val_sel(y, x, x_type, n_covs, invmat = invmat)
+    .ridge_p_val_sel(y, x, x_type, n_covs, invmat = invmat, lambda = lambda)
     } else if (method == "cor-greedy") {
     .greedy_cor_sel(y, x, n_covs)
     } else if (method == "random") {
@@ -265,7 +268,7 @@ predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
   x[, which(x_type=="d")] <- apply(x[, which(x_type == "d")], 2, as.factor)
   x[, which(x_type=="c")] <- apply(x[, which(x_type == "c")], 2, as.numeric)
 
-  X <- model.matrix(~., data=as.data.frame(x))
+  X <- model.matrix(~.-1, data=as.data.frame(x))
 
   # First compute inverse of (X^tX + lambdaI), which should be provided, really.
   if(is.null(invmat)){
@@ -274,8 +277,9 @@ predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
 
   hat <- X %*% invmat %*% t(X)
   nu <- nrow(X) - sum(diag(2*hat - hat %*% t(hat)))
-  betahat <- invmat %*% t(X) %*% y
-  sigmahat <- as.numeric((t(y - X %*% betahat) %*% (y - X %*% betahat))/nu)
+  betahat <- invmat %*% t(X) %*% (y - mean(y))
+  sigmahat <- as.numeric((t((y -mean(y)) - X %*% betahat) %*%
+                            ((y - mean(y)) - X %*% betahat))/nu)
   var_betahat <- diag(sigmahat * (invmat %*% (t(X) %*% X) %*% invmat))
 
   vals <- 2*pt(-abs(betahat / sqrt(var_betahat)), df=nu)

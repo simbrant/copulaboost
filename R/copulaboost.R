@@ -132,7 +132,7 @@ copulaboost <- function(y, x, cov_types, n_models = 100, n_covs=5,
 
 
 predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
-                                cont_method="Ingrid_mod", verbose = F) {
+                                cont_method="Ingrid", verbose = F) {
 
   if (is.null(eps)){
     eps <- model$eps
@@ -219,11 +219,13 @@ predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
 
     x <- as.data.frame(x)
     vals <- rep(1, ncol(x))
-    vals[x_type == "d"] <- apply(x[, x_type=="d"], 2,
+    vals[x_type == "d"] <- apply(as.matrix(x[, x_type == "d"]), 2,
                                  function(x) length(unique(x)) - 1)
     colind <- cumsum(vals)
-    x[, which(x_type=="d")] <- apply(x[, which(x_type == "d")], 2, as.factor)
-    x[, which(x_type=="c")] <- apply(x[, which(x_type == "c")], 2, as.numeric)
+    x[, which(x_type=="d")] <- apply(as.matrix(x[, which(x_type == "d")]),
+                                     2, as.factor)
+    x[, which(x_type=="c")] <- apply(as.marix(x[, which(x_type == "c")]),
+                                     2, as.numeric)
 
     x_ <- model.matrix(~., data=as.data.frame(x))
     lmod <- lm(y~x_-1)
@@ -245,11 +247,11 @@ predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
 
   x <- as.data.frame(x)
   vals <- rep(1, ncol(x))
-  vals[x_type == "d"] <- apply(x[, x_type=="d"], 2,
+  vals[x_type == "d"] <- apply(as.matrix(x[, x_type=="d"]), 2,
                                function(x) length(unique(x)) - 1)
   colind <- cumsum(vals)
-  x[, which(x_type=="d")] <- apply(x[, which(x_type == "d")], 2, as.factor)
-  x[, which(x_type=="c")] <- apply(x[, which(x_type == "c")], 2, as.numeric)
+  x[, which(x_type=="d")] <- apply(as.matrix(x[, which(x_type == "d")]), 2, as.factor)
+  x[, which(x_type=="c")] <- apply(as.matrix(x[, which(x_type == "c")]), 2, as.numeric)
 
   X <- model.matrix(~., data=as.data.frame(x))
 
@@ -262,11 +264,11 @@ predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
 
   x <- as.data.frame(x)
   vals <- rep(1, ncol(x))
-  vals[x_type == "d"] <- apply(x[, x_type=="d"], 2,
+  vals[x_type == "d"] <- apply(as.matrix(x[, x_type=="d"]), 2,
                                function(x) length(unique(x)) - 1)
   colind <- cumsum(vals)
-  x[, which(x_type=="d")] <- apply(x[, which(x_type == "d")], 2, as.factor)
-  x[, which(x_type=="c")] <- apply(x[, which(x_type == "c")], 2, as.numeric)
+  x[, which(x_type=="d")] <- apply(as.matrix(x[, which(x_type == "d")]), 2, as.factor)
+  x[, which(x_type=="c")] <- apply(as.matrix(x[, which(x_type == "c")]), 2, as.numeric)
 
   X <- model.matrix(~.-1, data=as.data.frame(x))
 

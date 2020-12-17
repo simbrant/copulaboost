@@ -198,11 +198,13 @@ predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
     .p_val_sel(y, x, x_type, n_covs)
   } else if (method == "p-value-ridge") {
     .ridge_p_val_sel(y, x, x_type, n_covs, invmat = invmat, lambda = lambda)
-    } else if (method == "cor-greedy") {
+  } else if (method == "coef-ridge") {
+    .ridge_coef_sel(y, x, x_type, n_covs, lambda)
+  } else if (method == "cor-greedy") {
     .greedy_cor_sel(y, x, n_covs)
-    } else if (method == "random") {
+  } else if (method == "random") {
     sample(ncol(x), n_covs)
-    } else {
+  } else {
     stop(paste0("Method '", method, "' not implemented!"))
   }
 
@@ -224,7 +226,7 @@ predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
     colind <- cumsum(vals)
     x[, which(x_type=="d")] <- apply(as.matrix(x[, which(x_type == "d")]),
                                      2, as.factor)
-    x[, which(x_type=="c")] <- apply(as.marix(x[, which(x_type == "c")]),
+    x[, which(x_type=="c")] <- apply(as.matrix(x[, which(x_type == "c")]),
                                      2, as.numeric)
 
     x_ <- model.matrix(~., data=as.data.frame(x))
@@ -253,7 +255,7 @@ predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
   x[, which(x_type=="d")] <- apply(as.matrix(x[, which(x_type == "d")]), 2, as.factor)
   x[, which(x_type=="c")] <- apply(as.matrix(x[, which(x_type == "c")]), 2, as.numeric)
 
-  X <- model.matrix(~., data=as.data.frame(x))
+  X <- model.matrix(~.-1, data=as.data.frame(x))
 
   # First compute inverse of (X^tX + lambdaI), which should be provided, really.
   invmat <- solve(t(X)%*%X + diag(rep(lambda, ncol(X))))
@@ -274,9 +276,8 @@ predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
 
   # First compute inverse of (X^tX + lambdaI), which should be provided, really.
   if(is.null(invmat)){
-    invmat <- .comp_invmat_ridge(x, xtype, lambda=lambda)
+    invmat <- .comp_invmat_ridge(x, x_type, lambda=lambda)
   }
-
   hat <- X %*% invmat %*% t(X)
   nu <- nrow(X) - sum(diag(2*hat - hat %*% t(hat)))
   betahat <- invmat %*% t(X) %*% (y - mean(y))
@@ -294,9 +295,26 @@ predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
   sample(dim(x)[2], n_covs, prob = 1 - p_fin)
 }
 
+.ridge_coef_sel <- function(y, x, x_type, n_covs, lambda = 1) {
 
+  x <- as.data.frame(x)
+  vals <- rep(1, ncol(x))
+  vals[x_type == "d"] <- apply(as.matrix(x[, x_type=="d"]), 2,
+                               function(x) length(unique(x)) - 1)
+  colind <- cumsum(vals)
+  x[, which(x_type=="d")] <- apply(as.matrix(x[, which(x_type == "d")]), 2, as.factor)
+  x[, which(x_type=="c")] <- apply(as.matrix(x[, which(x_type == "c")]), 2, as.numeric)
 
-.greedy_cor_sel <- function(y, x, n_covs, start="random"){
+  X <- model.matrix(~.-1, data=as.data.frame(x))
+  betas <- as.numeric(glmnet::glmnet(X, y, alpha=0, lambda=lambda)$beta)[-1]
+
+  b_fin <- c(max(abs(betas[1:colind[1]])),
+             sapply(2:length(colind),
+                    function(j) max(abs(betas[(colind[j-1] + 1):(colind[j])]))))
+  sample(dim(x)[2], n_covs, prob = b_fin)
+}
+
+.greedy_cor_sel <- function(y, x, n_covs, start="random") {
 
   # Initital covariate
   if (start=="random"){

@@ -2,7 +2,7 @@
 
 copulaboost <- function(y, x, cov_types, n_models = 100, n_covs=5,
                         learning_rate = 0.33, eps=5e-2, extra_x=NULL,
-                        verbose=F, cont_method="Ingrid", subsample_rows = F,
+                        verbose=F, cont_method="Localmedian", subsample_rows = F,
                         prop_sample=.1, n_sample = NULL, ml_update=T,
                         sel_method="p-value", lambda_ridgesel = 1) {
 
@@ -132,7 +132,7 @@ copulaboost <- function(y, x, cov_types, n_models = 100, n_covs=5,
 
 
 predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
-                                cont_method="Ingrid", verbose = F) {
+                                cont_method="Localmedian", verbose = F) {
 
   if (is.null(eps)){
     eps <- model$eps

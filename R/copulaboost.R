@@ -49,7 +49,7 @@ copulaboost <- function(y, x, cov_types, n_models = 100, n_covs=5,
     )
 
 
-  curr_incr <- copulareg::predict(model[[2]][[1]])
+  curr_incr <- predict(model[[2]][[1]])
   if (ml_update){
     scaling[2] <- optim(par=1,
                         fn=function(theta) -ll(current_prediction +
@@ -97,16 +97,16 @@ copulaboost <- function(y, x, cov_types, n_models = 100, n_covs=5,
       }
 
       if (subsample_rows){
-        curr_incr <- copulareg::predict(
+        curr_incr <- predict(
           model[[m]][[1]],
           newdata = x[, model[[m]][[2]]],
           eps=eps,
           cont_method=cont_method
         )
       } else{
-        curr_incr <- copulareg::predict(
+        curr_incr <- predict(
           model[[m]][[1]], eps=eps, cont_method=cont_method
-          )
+        )
       }
       if (ml_update) {
         scaling[m] <- optim(par=1,
@@ -151,13 +151,13 @@ predict.copulaboost <- function(model, new_x=NULL, eps=NULL,
       setTxtProgressBar(pb, value=m)
     }
     if (!is.null(new_x)){
-      learning_rate[m] * copulareg::predict(
+      learning_rate[m] * predict(
         model[[m]][[1]], newdata = new_x[, model[[m]][[2]]], eps=eps,
         cont_method=cont_method
       )
     } else {
-      learning_rate[m]*copulareg::predict(model[[m]][[1]], eps=eps,
-                                          cont_method=cont_method)
+      learning_rate[m]*predict(model[[m]][[1]], eps=eps,
+                               cont_method=cont_method)
     }
   }
 

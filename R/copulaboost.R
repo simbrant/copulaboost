@@ -5,7 +5,8 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
                         jitter_sel=T, ml_update=F, ml_sel=F, max_ml_scale=1,
                         keep_sel_struct=T, approx_order=2, parametric_margs=T,
                         parallel = F, par_method_sel = "itau",
-                        update_intercept=F, model = NULL) {
+                        update_intercept=T, model = NULL,
+                        xtreme = F) {
 
   if (ncol(x) != length(cov_types)) {
     stop(
@@ -59,7 +60,6 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
     start_ind <- length(model_old) + 1
     stop_ind <- n_models + length(model_old)
     rm(model_old)
-
   }
 
   if (verbose) {
@@ -89,8 +89,15 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
         m = approx_order, ystar_cont = if(m == 2) FALSE else TRUE,
         ml_update = ml_sel, max_ml_scale=max_ml_scale,
         par_method = par_method_sel, dx = distr_x_jitt,
-        dy = .compute_distrbs(y - plogis(current_prediction),
-                              "c", parametric_margs), cl=cl
+        dy = .compute_distrbs(
+          if(!xtreme) {
+            y - plogis(current_prediction)
+          } else {
+            (y - plogis(current_prediction)) / (
+              plogis(current_prediction)*(1 - plogis(current_prediction))
+            )
+          }, if(m == 2) "d" else "c", parametric_margs
+        ), cl=cl, xtreme=xtreme
       )
 
     } else {
@@ -98,19 +105,39 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
         current_prediction, y, x, cov_types, n_covs, m = approx_order,
         ystar_cont = if(m == 2) FALSE else TRUE, ml_update = ml_sel,
         max_ml_scale=max_ml_scale, par_method = par_method_sel, dx = distr_x,
-        dy = .compute_distrbs(y - plogis(current_prediction),
-                              "c", parametric_margs), cl=cl
+        dy =.compute_distrbs(
+          if(!xtreme) {
+            y - plogis(current_prediction)
+          } else {
+            (y - plogis(current_prediction)) / (
+              plogis(current_prediction)*(1 - plogis(current_prediction))
+            )
+          }, if(m == 2) "d" else "c", parametric_margs
+        ), cl=cl, xtreme=xtreme
       )
     }
 
     model[[m]][[1]] <- copulaboost::copulareg(
-      y - plogis(current_prediction), x = x[, model[[m]][[2]]],
+      if(!xtreme) {
+        y - plogis(current_prediction)
+        } else {
+          (y - plogis(current_prediction)) / (
+            plogis(current_prediction) * (1 - plogis(current_prediction))
+          )
+        }, x = x[, model[[m]][[2]]],
       var_type_y = if(m == 2) "d" else "c",
       var_type_x = cov_types[model[[m]][[2]]], family_set = family_set,
       dvine = keep_sel_struct,
       distr_x = .extract_margs(distr_x, model[[m]][[2]]),
-      distr_y = .compute_distrbs(y - plogis(current_prediction),
-                                 if(m == 2) "d" else "c", parametric_margs)
+      distr_y = .compute_distrbs(
+        if(!xtreme) {
+          y - plogis(current_prediction)
+        } else {
+          (y - plogis(current_prediction)) / (
+            plogis(current_prediction)*(1 - plogis(current_prediction))
+          )
+        }, if(m == 2) "d" else "c", parametric_margs
+      )
     )
 
     curr_incr <- predict(
@@ -156,6 +183,7 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
   if (parallel) {
     parallel::stopCluster(cl)
   }
+
   class(res) <- "copulaboost"
   res
 }
@@ -199,5 +227,4 @@ predict.copulaboost <- function(model, new_x=NULL, verbose=F, all_parts=F, imput
   } else {
     apply(predictions, 1, sum)
   }
-
 }

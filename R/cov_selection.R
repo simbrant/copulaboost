@@ -1,5 +1,6 @@
 
 .select_n_cov <- function(eta, y, x, x_type, n_cov, m, ystar_cont, ml_update,
+<<<<<<< HEAD
                           max_ml_scale, par_method, dx, dy, cl) {
   if (is.null(cl)) {
     .select_n_cov_serial(eta, y, x, x_type, n_cov, m, ystar_cont, ml_update,
@@ -7,11 +8,21 @@
   } else {
     .select_n_cov_parallel(eta, y, x, x_type, n_cov, m, ystar_cont, ml_update,
                            max_ml_scale, par_method, dx, dy, cl)
+=======
+                          max_ml_scale, par_method, dx, dy, cl, xtreme) {
+  if (is.null(cl)) {
+    .select_n_cov_serial(eta, y, x, x_type, n_cov, m, ystar_cont, ml_update,
+                         max_ml_scale, par_method, dx, dy, xtreme)
+  } else {
+    .select_n_cov_parallel(eta, y, x, x_type, n_cov, m, ystar_cont, ml_update,
+                           max_ml_scale, par_method, dx, dy, cl, xtreme)
+>>>>>>> 96ffed69e245077100d3d954ff11001e1340c28b
   }
 }
 
 .select_n_cov_parallel <- function(eta, y, x, x_type, n_cov, m, ystar_cont,
                                    ml_update, max_ml_scale, par_method, dx, dy,
+<<<<<<< HEAD
                                    cl) {
 
   model <- list(
@@ -21,6 +32,24 @@
     dy = if (is.null(dy)) {
       .compute_distrbs(y - plogis(eta), if (ystar_cont) "c" else "d")
     } else {
+=======
+                                   cl, xtreme) {
+
+  model <- list(
+    ystar = if(!xtreme){
+      y - plogis(eta) 
+    } else {
+      (y - plogis(eta))/(plogis(eta)*(1 - plogis(eta)))
+    },
+    vtyp_sel = rep(NULL, n_cov + 1),
+    selected_covs = rep(0, n_cov),
+    dy = if (is.null(dy) & !xtreme) {
+      .compute_distrbs(y - plogis(eta), if (ystar_cont) "c" else "d")
+    } else if (is.null(dy) & xtreme){
+      .compute_distrbs((y - plogis(eta)) / (plogis(eta)*(1 - plogis(eta))), 
+                       if (ystar_cont) "c" else "d")
+    } else{
+>>>>>>> 96ffed69e245077100d3d954ff11001e1340c28b
       dy
     },
     dx = if (is.null(dx)) {
@@ -154,6 +183,7 @@
 }
 
 .select_n_cov_serial<- function(eta, y, x, x_type, n_cov, m, ystar_cont,
+<<<<<<< HEAD
                                 ml_update, max_ml_scale, par_method, dx, dy) {
 
   model <- list(
@@ -163,6 +193,25 @@
     dy = if (is.null(dy)) {
       .compute_distrbs(y - plogis(eta), if (ystar_cont) "c" else "d")
     } else {
+=======
+                                ml_update, max_ml_scale, par_method, dx, dy,
+                                xtreme) {
+
+  model <- list(
+    ystar = if(!xtreme){
+      y - plogis(eta) 
+    } else {
+      (y - plogis(eta))/(plogis(eta)*(1 - plogis(eta)))
+    },
+    vtyp_sel = rep(NULL, n_cov + 1),
+    selected_covs = rep(0, n_cov),
+    dy = if (is.null(dy) & !xtreme) {
+      .compute_distrbs(y - plogis(eta), if (ystar_cont) "c" else "d")
+    } else if (is.null(dy) & xtreme){
+      .compute_distrbs((y - plogis(eta)) / (plogis(eta)*(1 - plogis(eta))), 
+                       if (ystar_cont) "c" else "d")
+    } else{
+>>>>>>> 96ffed69e245077100d3d954ff11001e1340c28b
       dy
     },
     dx = if (is.null(dx)) {
@@ -293,6 +342,10 @@
 .update_model <- function(j_new, nc, model, x, x_type, n_cov, par_method) {
   # This function contains all the code that adds one new variable
   # to the d-vine model
+<<<<<<< HEAD
+=======
+
+>>>>>>> 96ffed69e245077100d3d954ff11001e1340c28b
   assign(.make_hfunc_key(nc, c()),
          if (x_type[j_new] == "c") {
            model$dx$margins[[j_new]](x[, j_new])

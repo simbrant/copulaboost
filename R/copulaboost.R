@@ -25,34 +25,39 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
 
   if (is.null(model)) {
     # Make an empty version of the object that will be returned
-    model <- lapply(1:(n_models + 1), function(i) vector("list", 2))
+    model <- lapply(1:(n_models), function(i) vector("list", 2))
+    f_0 <- 0
+    f_0_updated <- rep(0, n_models)
 
     # First, compute an intercept (ml)
-    intercept <- stats::nlm(
+    f_0 <- stats::nlm(
       f = function(f0) (
         log(1 - plogis(f0)) + log(plogis(f0) / (1 - plogis(f0))) * mean(y)
       ) ** 2, p = 0
     )$estimate
 
-    model[[1]][[1]] <- intercept
-    model[[1]][[2]] <- NULL
-
-    current_prediction <- rep(intercept, length(y))
-    scaling <- rep(learning_rate, n_models + 1)
-    scaling[1] <- 1
-    start_ind <- 2
-    stop_ind <- n_models + 1
+    if (!update_intercept) {
+      f_0_updated <- rep(f_0, n_models)
+    }
+    current_prediction <- rep(f_0, length(y))
+    scaling <- rep(learning_rate, n_models)
+    start_ind <- 1
+    stop_ind <- n_models
 
   } else {
 
+    # FIX
     current_prediction <- predict(model, new_x=x)
     scaling <- c(model$scaling, rep(learning_rate, n_models))
     model_old <- model$model
+    f_0_updated <- c(model$f_0_updated, rep(0, n_models))
+    f_0 <- model$f_0
+    if (!update_intercept) {
+      f_0_updated[seq(length(f_0_updated))] <- f_0
+    }
     model <- lapply(seq(n_models + length(model_old)),
                     function(i) vector("list", 2))
-    model[[1]][[1]] <- model_old[[1]][[1]]
-
-    for (m in 2:length(model_old)) {
+    for (m in 1:length(model_old)) {
       model[[m]][[1]] <- model_old[[m]][[1]]
       model[[m]][[2]] <- model_old[[m]][[2]]
     }
@@ -86,7 +91,7 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
     if (jitter_sel) {
       model[[m]][[2]] <- .select_n_cov(
         current_prediction, y, x_jitt, rep("c", length(cov_types)), n_covs,
-        m = approx_order, ystar_cont = if(m == 2) FALSE else TRUE,
+        m = approx_order, ystar_cont = if(m == 1) FALSE else TRUE,
         ml_update = ml_sel, max_ml_scale=max_ml_scale,
         par_method = par_method_sel, dx = distr_x_jitt,
         dy = .compute_distrbs(
@@ -96,14 +101,15 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
             (y - plogis(current_prediction)) / (
               plogis(current_prediction)*(1 - plogis(current_prediction))
             )
-          }, if(m == 2) "d" else "c", parametric_margs
+          }, if(m == 1) "d" else "c",
+          if (TRUE) FALSE else parametric_margs
         ), cl=cl, xtreme=xtreme
       )
 
     } else {
       model[[m]][[2]] <- .select_n_cov(
         current_prediction, y, x, cov_types, n_covs, m = approx_order,
-        ystar_cont = if(m == 2) FALSE else TRUE, ml_update = ml_sel,
+        ystar_cont = if(m == 1) FALSE else TRUE, ml_update = ml_sel,
         max_ml_scale=max_ml_scale, par_method = par_method_sel, dx = distr_x,
         dy =.compute_distrbs(
           if(!xtreme) {
@@ -112,7 +118,8 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
             (y - plogis(current_prediction)) / (
               plogis(current_prediction)*(1 - plogis(current_prediction))
             )
-          }, if(m == 2) "d" else "c", parametric_margs
+          }, if(m == 1) "d" else "c",
+          if (TRUE) FALSE else parametric_margs
         ), cl=cl, xtreme=xtreme
       )
     }
@@ -125,7 +132,7 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
             plogis(current_prediction) * (1 - plogis(current_prediction))
           )
         }, x = x[, model[[m]][[2]]],
-      var_type_y = if(m == 2) "d" else "c",
+      var_type_y = if(m == 1) "d" else "c",
       var_type_x = cov_types[model[[m]][[2]]], family_set = family_set,
       dvine = keep_sel_struct,
       distr_x = .extract_margs(distr_x, model[[m]][[2]]),
@@ -136,7 +143,8 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
           (y - plogis(current_prediction)) / (
             plogis(current_prediction)*(1 - plogis(current_prediction))
           )
-        }, if(m == 2) "d" else "c", parametric_margs
+        }, if(m == 1) "d" else "c",
+        if (TRUE) FALSE else parametric_margs
       )
     )
 
@@ -165,7 +173,7 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
         ),
         p=0
       )$estimate
-      model[[1]][[1]] <- model[[1]][[1]] + upd
+      f_0_updated[m] <- if(m == 1) f_0 + upd else f_0_updated[m-1] + upd
       current_prediction <- current_prediction + upd
     }
 
@@ -177,8 +185,8 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
 
   res <- list(
     model = model, learning_rate = learning_rate, cov_types = cov_types,
-    eps = eps, scaling = scaling
-  )
+    eps = eps, scaling = scaling, f_0_updated = f_0_updated,
+    f_0 = f_0)
 
   if (parallel) {
     parallel::stopCluster(cl)
@@ -190,31 +198,29 @@ copulaboost <- function(y, x, cov_types, n_models=100, n_covs=5,
 
 predict.copulaboost <- function(model, new_x=NULL, verbose=F, all_parts=F, impute_na=T) {
 
-  n_models <- length(model$model) - 1
+  n_models <- length(model$model)
 
   predictions <- matrix(
     0, nrow = if (!is.null(new_x)) {
       nrow(new_x)
     } else {
       length(predict(model$model[[2]][[1]]))
-    }, ncol = n_models + 1
+    }, ncol = n_models
   )
-
-  predictions[, 1] <- model$model[[1]][[1]]
 
   if (verbose) {
     pb <- txtProgressBar(min = 0, max = n_models, style = 3, initial = 1)
   }
 
   for (j in seq(n_models)) {
-    predictions[, j + 1] <- (
-      model$scaling[j + 1] *
-        predict(model$model[[j + 1]][[1]], new_x[, model$model[[j + 1]][[2]]],
+    predictions[, j] <- (
+      model$scaling[j] *
+        predict(model$model[[j]][[1]], new_x[, model$model[[j]][[2]]],
                 eps = model$eps)
     )
-    if (any(is.na(predictions[, j + 1])) ) {
-      predictions[is.na(predictions[, j + 1]), j + 1] <- median(
-        predictions[!is.na(predictions[, j + 1]), j + 1]
+    if (any(is.na(predictions[, j])) ) {
+      predictions[is.na(predictions[, j]), j] <- median(
+        predictions[!is.na(predictions[, j]), j]
       )
     }
     if (verbose) {
@@ -223,8 +229,12 @@ predict.copulaboost <- function(model, new_x=NULL, verbose=F, all_parts=F, imput
   }
 
   if (all_parts) {
-    t(apply(predictions, 1, cumsum))
+    all_preds <- t(apply(predictions, 1, cumsum))
+    for (j in 1:n_models){
+      all_preds[, j] <- all_preds[, j] + model$f_0_updated[j]
+    }
+    all_preds
   } else {
-    apply(predictions, 1, sum)
+    apply(predictions, 1, sum) + model$f_0_updated[n_models]
   }
 }

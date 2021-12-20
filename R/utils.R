@@ -132,6 +132,11 @@
     )
   )$coef
 
+  if (any(is.na(gammas))){
+    print(gammas)
+    print(y)
+    ptint(u)
+  }
   means <- c(r) * qnorm(v)
   sd <- rep(sqrt(1 - r**2), n)
 

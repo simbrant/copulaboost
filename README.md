@@ -13,4 +13,4 @@ This package implements Additive copula regression for regression
     re-fits the component where the pair-copula distributions can be different
     from Gaussian, if specified.
 
-In addition to additive copula regression, implemented in the method copulaboost::copulaboost, this package also contains a standalone method that implements copula regression, where $(Y, \mathbf{X})$
+In addition to additive copula regression, implemented in the method copulaboost::copulaboost, this package also contains a standalone method that implements copula regression, where $(Y, \mathbf{X})$ can be modeled via a general R-vine (or a D-vine, if specified), and the conditional expectation computed from the vine copula model. In order to do this, i.e., to be able to compute the conditional expectation, the structure of the copula regression model is selected under the condition that $Y$ must be in the top node of the vine.

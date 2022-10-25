@@ -36,13 +36,13 @@
   }
 }
 
-.bicop_2_hbicop <- function(u, bicop_obj, cond_var=2, return_u_minus=F) {
+.bicop_2_hbicop <- function(u, bicop_obj, cond_var=2, return_u_minus=FALSE) {
 
   # Function that lets you compute h-functions, without having to
   # specify the u_1^- when computing C(u_1 | u_2), when u_1 is
   # discrete. This is because u_1^- is redundant in that case, but rvinecopulibs
   # hbicop() function demands that it is provided. In addition, the specifying
-  # return_u_minus = T, will make the function output the n x 2 matrix
+  # return_u_minus = TRUE, will make the function output the n x 2 matrix
   # [C(u_2 | u_1), C(u_2^- | u_1)] if cond_var = 1, or
   # [C(u_1 | u_2), C(u_1^- | u_2)] if cond_var = 2.
 
@@ -107,7 +107,7 @@
   }
 }
 
-.approx_cond_exp <- function(y, u, v, m, r, truncate=T) {
+.approx_cond_exp <- function(y, u, v, m, r, truncate=TRUE) {
 
   first_six_moments <- function(mu, sigma) {
     cbind(mu,
@@ -125,19 +125,14 @@
 
   n <- length(y)
 
-  gammas <- lm(
+  gammas <- stats::lm(
     y~. - 1,
     data = as.data.frame(
-      sapply(seq_len(m + 1), function(j) qnorm(u) ** (j - 1))
+      sapply(seq_len(m + 1), function(j) stats::qnorm(u) ** (j - 1))
     )
   )$coef
 
-  if (any(is.na(gammas))){
-    print(gammas)
-    print(y)
-    ptint(u)
-  }
-  means <- c(r) * qnorm(v)
+  means <- c(r) * stats::qnorm(v)
   sd <- rep(sqrt(1 - r**2), n)
 
   if (m == 1) {
@@ -171,7 +166,7 @@
   }
 }
 
-.get_valid_edges <- function(t, rvine_mat, flipped_mat=F) {
+.get_valid_edges <- function(t, rvine_mat, flipped_mat=FALSE) {
 
   # This function finds all valid values that can
   # be entered into m_{d + 1 -t, 1} for t from 2 to d-1,
@@ -219,7 +214,7 @@
   # cdf functions for each column, as well as a function that can transform
   # a new matrix that has the same number of columns, by these empirical cdf
   # functions. If parametric = TRUE, the function will fit and return marginal
-  # cdfs that are
+  # cdfs that are gaussian or bernoulli distributed.
   #
 
   # Check, in case x is 1d
@@ -241,7 +236,7 @@
 
     weight <- switch(x_type, c = 1 / (n + 1), d = 1 / n)
     vals <- unique(x)
-    rval <- approxfun(
+    rval <- stats::approxfun(
       vals, cumsum(tabulate(match(x, vals))) * weight, method = "constant",
       yleft = 0, yright = 1, f = 0, ties = "ordered"
     )
@@ -324,23 +319,23 @@ normal_marg <- function(x) {
   f <- function(z) {
     mu <- attr(sys.function(), "mu")
     sigma <- attr(sys.function(), "sigma")
-    pnorm(z, mu, sigma)
+    stats::pnorm(z, mu, sigma)
   }
   attr(f, "mu") <- mean(x)
-  attr(f, "sigma") <- sd(x)
+  attr(f, "sigma") <- stats::sd(x)
   class(f) <- c("normal_marg")
   attr(f, "call") <- sys.call()
   f
 }
 
 quantile.normal_marg <- function(f, probs) {
-  qnorm(probs, attr(f, "mu"), attr(f, "sigma"))
+  stats::qnorm(probs, attr(f, "mu"), attr(f, "sigma"))
 }
 
 bernoulli_marg <- function(x) {
   f <- function(z) {
     prob <- attr(sys.function(), "prob")
-    pbinom(z, 1, prob)
+    stats::pbinom(z, 1, prob)
   }
   attr(f, "prob") <- mean(x)
   class(f) <- c("bernoulli_marg")
@@ -349,5 +344,5 @@ bernoulli_marg <- function(x) {
 }
 
 quantile.bernoulli_marg <- function(f, probs) {
-  qbinom(probs, 1, attr(f, "prob"))
+  stats::qbinom(probs, 1, attr(f, "prob"))
 }

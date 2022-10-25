@@ -1,5 +1,6 @@
 copulareg <- function(y, x, var_type_y, var_type_x, distr_x=NULL, distr_y=NULL,
-                      dvine=F, family_set=c("gaussian", "clayton", "gumbel")) {
+                      dvine=FALSE,
+                      family_set=c("gaussian", "clayton", "gumbel")) {
   ##' copulareg
   ##' @aliases copulareg
   ##' @description This function fits joint distributions with an R-vine
@@ -14,10 +15,24 @@ copulareg <- function(y, x, var_type_y, var_type_x, distr_x=NULL, distr_y=NULL,
   ##' @param var_type_x A vector of p characters that have to take the value
   ##' "c" or "d" to indicate whether each margin of the covariates is discrete
   ##' or continuous.
+  ##' @param distr_x Internally created object that contains a nested list.
+  ##' The first element of the 'outer' list is a list where each element
+  ##' is a distribution object similar to that created by ecdf, the second
+  ##' element is a function 'transform' that takes a matrix of values of x, 
+  ##' and returns the corresponding cumulative distributions F(x).
+  ##' @param distr_y Similar to distr_x, but for the outcome y.
+  ##' @param dvine Logical variable indicating whether the function should fit
+  ##' a canonical d-vine to (y, x) with the ordering (x_1, ..., x_p, y).
   ##' @param family_set A vector of strings that specifies the set of
   ##' pair-copula families that the fitting algorithm chooses from. For an
   ##' overview of which values that can be specified, see the documentation
   ##' for \link[rvinecopulib]{bicop}.
+  ##' @return A copulareg object. Consists of 'model', an rvinecopulib
+  ##' 'vinecop' object for the copula-model for (x_1, ..., x_p, y),
+  ##' a hash table containing all of the conditionals for the model (for the
+  ##' training set), objects distr_x and distr_y that contain the marginal
+  ##' distributions of the covariates and the outcome, and y, the y-values for
+  ##' the training data.
 
   fit <- .fit_model_xy(y, x, var_type_y, var_type_x, family_set, dvine, distr_x,
                        distr_y)
@@ -164,7 +179,9 @@ copulareg <- function(y, x, var_type_y, var_type_x, distr_x=NULL, distr_y=NULL,
       # conditional Kendall's tau with the response.
       u_x <- sapply(valid, function(j) .get_hfunc(j, cond_set, conditionals))
       u_y <- .get_hfunc(p + 1, cond_set, conditionals)
-      new_mat[t, 1] <- valid[which.max(abs(cor(u_y, u_x, method = "kendall")))]
+      new_mat[t, 1] <- valid[which.max(
+        abs(stats::cor(u_y, u_x, method = "kendall"))
+        )]
     }
 
     # Combine the two variables that the new pair copula will be fit to.
@@ -226,12 +243,12 @@ copulareg <- function(y, x, var_type_y, var_type_x, distr_x=NULL, distr_y=NULL,
 
 }
 
-predict.copulareg <- function(fit, new_x=NULL, eps=1E-2,
-                              cont_method="Localmedian") {
+predict.copulareg <- function(object, new_x=NULL, eps=1E-2,
+                              cont_method="Localmedian", ...) {
   ##' predict.copulareg
   ##' @aliases predict.copulareg
   ##' @description Computes predictions based on a fitted copulareg model.
-  ##' @param fit Model fit as returned by copulareg
+  ##' @param object Model fit as returned by copulareg
   ##' @param new_x optional matrix of covariate values to compute the predicted
   ##' values of the outcome for. If not specified, the predicted values for the
   ##' training sample is returned.
@@ -246,6 +263,9 @@ predict.copulareg <- function(fit, new_x=NULL, eps=1E-2,
   ##' median on the interval. The second method computes the integral by
   ##' integrating the survival function using the trapezoidal rule, by
   ##' transforming the outcome into a positive variable by adding a constant.
+  ##' @param ... further arguments passed to or from other methods.
+  ##' @return A list of predicted values for each row of new_x, if specified,
+  ##' otherwise, predictions for each row of the training data is returned.
 
   eval_at_u_y <- function(u_y, model, n_test, cond_x, y_type) {
 
@@ -271,18 +291,18 @@ predict.copulareg <- function(fit, new_x=NULL, eps=1E-2,
   }
 
   # Extract x and y types from model
-  y_type <- fit$model$var_types[fit$model$structure$d]
-  x_type <- fit$model$var_types[1:(fit$model$structure$d - 1)]
+  y_type <- object$model$var_types[object$model$structure$d]
+  x_type <- object$model$var_types[1:(object$model$structure$d - 1)]
 
   # Transform covariates
   if (!is.null(new_x)) {
 
     n_obs <- nrow(as.matrix(new_x))
-    u_x <- fit$distr_x$transform(new_x, x_type)
+    u_x <- object$distr_x$transform(new_x, x_type)
 
-    if (fit$model$structure$d > 2) {
+    if (object$model$structure$d > 2) {
       # Extract covariate model from model
-      sub_mod <- fit$model
+      sub_mod <- object$model
       sub_mod$structure <- rvinecopulib::as_rvine_structure(
         rvinecopulib::as_rvine_matrix(
           sub_mod$structure
@@ -308,8 +328,8 @@ predict.copulareg <- function(fit, new_x=NULL, eps=1E-2,
     }
 
   } else {
-    cond_x <- fit$conditionals
-    n_obs <- fit$model$nobs
+    cond_x <- object$conditionals
+    n_obs <- object$model$nobs
   }
 
   if (y_type == "c") {
@@ -328,7 +348,9 @@ predict.copulareg <- function(fit, new_x=NULL, eps=1E-2,
       u_y <- seq(eps, 1, eps)
 
       # The local median within each subinterval
-      y_u <- quantile(fit$distr_y$margins[[1]], probs = u_y - eps / 2)
+      y_u <- stats::quantile(
+        object$distr_y$margins[[1]], probs = u_y - eps / 2
+        )
 
       # Compute the integral, compute the conditional CDF at the right endpoints
       # of the intervals corresponding to each evaluation point first (the last
@@ -337,7 +359,7 @@ predict.copulareg <- function(fit, new_x=NULL, eps=1E-2,
         sapply(
           u_y[-length(u_y)],
           function(u) eval_at_u_y(
-            rep(u, n_obs), fit$model, n_obs, cond_x, y_type
+            rep(u, n_obs), object$model, n_obs, cond_x, y_type
           )
         ),
         rep(1, n_obs)
@@ -353,14 +375,14 @@ predict.copulareg <- function(fit, new_x=NULL, eps=1E-2,
       u_y <- seq(0, 1, eps)
 
       # Inverse CDF of Y at evaluation points
-      y_u <- quantile(fit$distr_y$margins[[1]], probs = u_y)
+      y_u <- stats::quantile(object$distr_y$margins[[1]], probs = u_y)
 
       # Compute the conditional survival function at each evaluation point
       surv <- sapply(u_y, function(u) 1 - eval_at_u_y(rep(u, n_obs),
-                                                      fit$model, n_obs,
+                                                      object$model, n_obs,
                                                       cond_x, y_type))
 
-      (quantile(y_u, 0) +
+      (stats::quantile(y_u, 0) +
           sapply(1:(length(u_y) - 1),
                  function(j) (surv[, j] + surv[, j + 1]) / 2)
         %*% (y_u[-1] - y_u[-length(y_u)]))
@@ -372,19 +394,19 @@ predict.copulareg <- function(fit, new_x=NULL, eps=1E-2,
     # Discrete case #
     #################
 
-    if (is.null(fit$y)) {
+    if (is.null(object$y)) {
       stop(
         "Must supply y-values used for fitting the model, when y is discrete"
       )
     }
 
-    yval <- sort(unique(fit$y))
-    u_y <- fit$distr_y$transform(yval, "d")
+    yval <- sort(unique(object$y))
+    u_y <- object$distr_y$transform(yval, "d")
     uu <- vapply(
       1:(nrow(u_y)),
       function(i) eval_at_u_y(
-        matrix(rep(u_y[i, ], n_obs), ncol = 2, byrow = T), fit$model, n_obs,
-        cond_x, y_type = "d"
+        matrix(rep(u_y[i, ], n_obs), ncol = 2, byrow = TRUE), object$model,
+        n_obs, cond_x, y_type = "d"
       ), FUN.VALUE = matrix(0, nrow = n_obs, ncol = 2)
     )
 

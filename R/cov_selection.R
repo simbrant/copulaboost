@@ -1,4 +1,3 @@
-
 .select_n_cov <- function(eta, y, x, x_type, n_cov, m, ystar_cont, ml_update,
                           max_ml_scale, par_method, dx, dy, cl, xtreme) {
   if (is.null(cl)) {
@@ -16,17 +15,20 @@
 
   model <- list(
     ystar = if(!xtreme){
-      y - plogis(eta)
+      y - stats::plogis(eta)
     } else {
-      (y - plogis(eta))/(plogis(eta)*(1 - plogis(eta)))
+      (y - stats::plogis(eta))/(stats::plogis(eta)*(1 - stats::plogis(eta)))
     },
     vtyp_sel = rep(NULL, n_cov + 1),
     selected_covs = rep(0, n_cov),
     dy = if (is.null(dy) & !xtreme) {
-      .compute_distrbs(y - plogis(eta), if (ystar_cont) "c" else "d")
+      .compute_distrbs(y - stats::plogis(eta), if (ystar_cont) "c" else "d")
     } else if (is.null(dy) & xtreme){
-      .compute_distrbs((y - plogis(eta)) / (plogis(eta)*(1 - plogis(eta))),
-                       if (ystar_cont) "c" else "d")
+      .compute_distrbs(
+        (y - stats::plogis(eta)) / 
+          (stats::plogis(eta)*(1 - stats::plogis(eta))),
+        if (ystar_cont) "c" else "d"
+      )
     } else{
       dy
     },
@@ -72,7 +74,7 @@
       model <- .update_model(j, nc, model, x, x_type, n_cov, par_method)
 
       # Compute approximation to E(ystar | x_s_curr)
-      if (ystar_cont == T) {
+      if (ystar_cont == TRUE) {
 
         utop <- cbind(
           .get_hfunc(
@@ -108,7 +110,7 @@
                 envir = model$transformed_variables)
           )
           h <- .bicop_2_hbicop(u_, model$p_cops[[1]][[1]],
-                               return_u_minus = T)
+                               return_u_minus = TRUE)
           if (nc > 1) {
             for (t in seq(2, nc)) {
               u_ <- .weave_transformed(
@@ -117,7 +119,7 @@
                        envir = model$transformed_variables)
               )
               h <- .bicop_2_hbicop(u_, model$p_cops[[t]][[1]],
-                                   return_u_minus = T)
+                                   return_u_minus = TRUE)
             }
           }
 
@@ -126,7 +128,7 @@
 
         uu <- vapply(1:(nrow(u_y)),
                      function(i) eval_at_u_y(matrix(rep(u_y[i, ], length(y)),
-                                                    ncol = 2, byrow = T)),
+                                                    ncol = 2, byrow = TRUE)),
                      FUN.VALUE = matrix(0, nrow = length(y), ncol = 2))
 
         p_y <- sapply(seq_len(nrow(u_y)),
@@ -137,13 +139,15 @@
       }
 
       scale <- if (ml_update) {
-        optim(
-          fn = function(theta) -sum(dbinom(y, 1, plogis(eta + theta * h_k))),
+        stats::optim(
+          fn = function(theta) {
+            -sum(stats::dbinom(y, 1, stats::plogis(eta + theta * h_k)))
+          },
           par = 1, method = "Brent", lower = 0, upper = max_ml_scale)$par
       } else {
         1
       }
-      sum(dbinom(y, 1, plogis(eta + scale * h_k), log = T))
+      sum(stats::dbinom(y, 1, stats::plogis(eta + scale * h_k), log = TRUE))
     }
 
     rs_nc[loop_inds] <- parallel::parSapply(cl, X = loop_inds,
@@ -166,17 +170,19 @@
 
   model <- list(
     ystar = if(!xtreme){
-      y - plogis(eta)
+      y - stats::plogis(eta)
     } else {
-      (y - plogis(eta))/(plogis(eta)*(1 - plogis(eta)))
+      (y - stats::plogis(eta))/(stats::plogis(eta)*(1 - stats::plogis(eta)))
     },
     vtyp_sel = rep(NULL, n_cov + 1),
     selected_covs = rep(0, n_cov),
     dy = if (is.null(dy) & !xtreme) {
-      .compute_distrbs(y - plogis(eta), if (ystar_cont) "c" else "d")
+      .compute_distrbs(y - stats::plogis(eta), if (ystar_cont) "c" else "d")
     } else if (is.null(dy) & xtreme){
-      .compute_distrbs((y - plogis(eta)) / (plogis(eta)*(1 - plogis(eta))),
-                       if (ystar_cont) "c" else "d")
+      .compute_distrbs(
+        (y - stats::plogis(eta)) / 
+          (stats::plogis(eta)*(1 - stats::plogis(eta))),
+        if (ystar_cont) "c" else "d")
     } else{
       dy
     },
@@ -222,7 +228,7 @@
       model <- .update_model(j, nc, model, x, x_type, n_cov, par_method)
 
       # Compute approximation to E(ystar | x_s_curr)
-      if (ystar_cont == T) {
+      if (ystar_cont == TRUE) {
 
         utop <- cbind(
           .get_hfunc(
@@ -258,7 +264,7 @@
                 envir = model$transformed_variables)
           )
           h <- .bicop_2_hbicop(u_, model$p_cops[[1]][[1]],
-                               return_u_minus = T)
+                               return_u_minus = TRUE)
           if (nc > 1) {
             for (t in seq(2, nc)) {
               u_ <- .weave_transformed(
@@ -267,7 +273,7 @@
                        envir = model$transformed_variables)
               )
               h <- .bicop_2_hbicop(u_, model$p_cops[[t]][[1]],
-                                   return_u_minus = T)
+                                   return_u_minus = TRUE)
             }
           }
 
@@ -276,7 +282,7 @@
 
         uu <- vapply(1:(nrow(u_y)),
                      function(i) eval_at_u_y(matrix(rep(u_y[i, ], length(y)),
-                                                    ncol = 2, byrow = T)),
+                                                    ncol = 2, byrow = TRUE)),
                      FUN.VALUE = matrix(0, nrow = length(y), ncol = 2))
 
         p_y <- sapply(seq_len(nrow(u_y)),
@@ -287,13 +293,16 @@
       }
 
       scale <- if (ml_update) {
-        optim(
-          fn = function(theta) -sum(dbinom(y, 1, plogis(eta + theta * h_k))),
-          par = 1, method = "Brent", lower = 0, upper = max_ml_scale)$par
+        stats::optim(
+          fn = function(theta){
+            -sum(stats::dbinom(y, 1, stats::plogis(eta + theta * h_k)))
+            }, par = 1, method = "Brent", lower = 0, upper = max_ml_scale)$par
       } else {
         1
       }
-      rs_nc[j] <- sum(dbinom(y, 1, plogis(eta + scale * h_k), log = T))
+      rs_nc[j] <- sum(
+        stats::dbinom(y, 1, stats::plogis(eta + scale * h_k), log = TRUE)
+        )
     }
 
     # Update the model

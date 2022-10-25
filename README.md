@@ -12,3 +12,5 @@ This package implements Additive copula regression for regression
     When the variables and structure have been selected, the algorithm then
     re-fits the component where the pair-copula distributions can be different
     from Gaussian, if specified.
+
+In addition to additive copula regression, implemented in the method copulaboost::copulaboost, this package also contains a standalone method that implements copula regression, where $(Y, \mathbf{X})$

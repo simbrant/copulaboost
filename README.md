@@ -3,8 +3,8 @@
 [![](https://cranlogs.r-pkg.org/badges/grand-total/copulaboost)](https://cran.r-project.org/web/packages/copulaboost/index.html)
 [![](https://cranlogs.r-pkg.org/badges/last-month/copulaboost)](https://cran.r-project.org/web/packages/copulaboost/index.html)
 
-Additive copula regression for regression
-    problems with binary outcome via gradient boosting 
+This package implements Additive copula regression for regression
+    problems with binary outcome via gradient boosting, as detailed in
     [Brant, Hobæk Haff (2022); <arXiv:2208.04669>]. The fitting process
     includes a specialised model selection algorithm for each component, where
     each component is found (by greedy optimisation) among all the D-vines with
